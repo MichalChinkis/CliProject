@@ -1,0 +1,113 @@
+// --- Start of fil.cs ---
+using System;
+
+class Avrum
+{
+    static void Main(string[] args)
+    {
+        Console.WriteLine("���� ����");
+    }
+}
+// --- End of fil.cs ---
+
+// --- Start of Program.cs ---
+using System;
+using System.CommandLine;
+using System.CommandLine.Invocation;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks; // הוספת שימוש ב-Task
+
+var bundleCommand = new Command("bundle", "Bundle code files into a single file")
+{
+    new Option<string>("--language", "Comma-separated list of programming languages (or 'all')") { IsRequired = true },
+    new Option<string>("--output","optional command of the zip file's name"),
+    new Option<bool>("--note", "Include a note with the source code paths in the bundle"),
+    new Option<string>("--sort", "Sort files by 'name' or 'extension'. Default is 'name'.") 
+
+};
+bundleCommand.SetHandler(async (InvocationContext context) =>
+{
+    // שלוף את הערך של --language בצורה נכונה
+var language = context.ParseResult.GetValueForOption(bundleCommand.Options.First(o => o.Name == "language")) ?? string.Empty;
+var fileName = context.ParseResult.GetValueForOption(bundleCommand.Options.First(o => o.Name == "output")) ?? "bundle.zip";
+var note = context.ParseResult.GetValueForOption(bundleCommand.Options.First(o => o.Name == "note")) ?? string.Empty;
+var sort = context.ParseResult.GetValueForOption(bundleCommand.Options.First(o => o.Name == "sort")) ?? string.Empty;
+
+
+    Console.WriteLine(language + " language");
+    Console.WriteLine(fileName + " filename");
+
+
+    if (string.IsNullOrEmpty(language.ToString()))
+    {
+        Console.WriteLine("The --language option is required.");
+        return;
+    }
+
+    // אם המשתמש בחר 'all', כל קבצי הקוד ייכללו
+    if (language.ToString().ToLower() == "all")
+    {
+        Console.WriteLine("Bundling all code files...");
+        var allFiles = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.*", SearchOption.TopDirectoryOnly);
+        await CreateBundle(allFiles,fileName.ToString()); // הוספת await פה כדי להמתין לסיום
+    }
+    else
+    {
+        // אחרת, בחר קבצים לפי השפות שנבחרו
+        var languages = language.ToString().Split(',').Select(l => l.Trim().ToLower()).ToArray();
+        var languageExtensions = GetExtensionsForLanguages(languages);
+        var selectedFiles = languageExtensions.SelectMany(ext => Directory.GetFiles(Directory.GetCurrentDirectory(), $"*.{ext}")).ToArray();
+        await CreateBundle(selectedFiles,fileName.ToString()); // הוספת await פה כדי להמתין לסיום
+    }
+});
+
+
+var rootCommand = new RootCommand();
+rootCommand.AddCommand(bundleCommand);
+
+
+await rootCommand.InvokeAsync(args); // הוספת await פה כדי להמתין לסיום
+
+// פונקציה שמקבלת קבצים ומבצעת את האריזה
+async Task CreateBundle(string[] files, string fileName)
+{
+    // הגדר שם ברירת מחדל אם לא סופק שם קובץ
+    var bundleFile = string.IsNullOrEmpty(fileName) ? "bundle.txt" : fileName;
+    if (!(bundleFile.EndsWith(".txt"))) bundleFile = bundleFile +".txt";
+
+    // פתח קובץ כתיבה אסינכרוני
+    using (var writer = new StreamWriter(bundleFile, false))
+    {
+        foreach (var file in files)
+        {
+            writer.WriteLine($"// --- Start of {Path.GetFileName(file)} ---");
+            var content = await File.ReadAllTextAsync(file);
+            await writer.WriteLineAsync(content);
+            writer.WriteLine($"// --- End of {Path.GetFileName(file)} ---\n");
+        }
+    }
+
+    Console.WriteLine($"Files bundled into {bundleFile}");
+}
+
+
+
+// פונקציה שמחזירה את סיומות הקבצים המתאימים לשפות שנבחרו
+string[] GetExtensionsForLanguages(string[] languages)
+{
+    var languageExtensions = new System.Collections.Generic.Dictionary<string, string[]>
+    {
+        { "csharp", new[] { "cs" } },
+        { "javascript", new[] { "js" } },
+        { "python", new[] { "py" } },
+        { "java", new[] { "java" } }
+        // אפשר להוסיף שפות נוספות לפי הצורך
+    };
+
+    return languages.SelectMany(lang => languageExtensions.ContainsKey(lang) ? languageExtensions[lang] : new string[0]).ToArray();
+}
+// --- End of Program.cs ---
+
